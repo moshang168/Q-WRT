@@ -33,7 +33,7 @@ define Build/bcm4908img
 	cp -r $(DEVICE_NAME)/* $@-bootfs/
 	touch $@-bootfs/1-openwrt
 	cp $(DTS_DIR)/$(firstword $(DEVICE_DTS)).dtb $@-bootfs/94908.dtb
-	cp $(KDIR)/bcm63xx-cfe/$(subst _,$(comma),$(DEVICE_NAME))/cferam.000 $@-bootfs/
+	cp $(STAGING_DIR_IMAGE)/bcm63xx-cfe/$(subst _,$(comma),$(DEVICE_NAME))/cferam.000 $@-bootfs/
 	cp $(IMAGE_KERNEL) $@-bootfs/vmlinux.lz
 
 	$(STAGING_DIR_HOST)/bin/mkfs.jffs2 --pad=0x800000 --little-endian --squash-uids \
@@ -68,14 +68,14 @@ define Device/Default
   KERNEL_INITRAMFS := kernel-bin | bcm4908lzma | bcm4908kernel
   FILESYSTEMS := squashfs
   KERNEL_NAME := Image
-  IMAGE_NAME = $$(IMAGE_PREFIX)-$$(1).$$(2)
+  DEVICE_IMG_NAME = $$(DEVICE_IMG_PREFIX)-$$(1).$$(2)
   BLOCKSIZE := 128k
   PAGESIZE := 2048
   IMAGE/bin := append-ubi | bcm4908img
 endef
 
 define Device/asus_gt-ac5300
-  DEVICE_VENDOR := Asus
+  DEVICE_VENDOR := ASUS
   DEVICE_MODEL := GT-AC5300
   DEVICE_DTS := broadcom/bcmbca/bcm4908-asus-gt-ac5300
   IMAGES := bin
@@ -88,9 +88,9 @@ endef
 TARGET_DEVICES += asus_gt-ac5300
 
 define Device/asus_gt-ax6000
-  DEVICE_VENDOR := Asus
+  DEVICE_VENDOR := ASUS
   DEVICE_MODEL := GT-AX6000
-  KERNEL := kernel-bin | bootfs
+  DEVICE_DTS := broadcom/bcmbca/bcm4912-asus-gt-ax6000
   IMAGES := pkgtb
   IMAGE/pkgtb := append-rootfs | pkgtb
   SOC := bcm4912

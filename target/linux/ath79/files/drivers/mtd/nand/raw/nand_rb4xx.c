@@ -188,10 +188,10 @@ static int rb4xx_nand_probe(struct platform_device *pdev)
 	if (mtd->writesize == 512)
 		mtd_set_ooblayout(mtd, &rb4xx_nand_ecclayout_ops);
 
-	nand->chip.ecc.mode	= NAND_ECC_SOFT;
-	nand->chip.ecc.algo	= NAND_ECC_HAMMING;
-	nand->chip.options	= NAND_NO_SUBPAGE_WRITE;
-	nand->chip.priv		= nand;
+	nand->chip.ecc.engine_type	= NAND_ECC_ENGINE_TYPE_SOFT;
+	nand->chip.ecc.algo		= NAND_ECC_ALGO_HAMMING;
+	nand->chip.options		= NAND_NO_SUBPAGE_WRITE;
+	nand->chip.priv			= nand;
 
 	nand->chip.legacy.read_byte	= rb4xx_nand_read_byte;
 	nand->chip.legacy.write_buf	= rb4xx_nand_write_buf;
@@ -206,32 +206,25 @@ static int rb4xx_nand_probe(struct platform_device *pdev)
 
 	ret = mtd_device_register(mtd, NULL, 0);
 	if (ret) {
-		nand_release(&nand->chip);
+		mtd_device_unregister(nand_to_mtd(&nand->chip));
+		nand_cleanup(&nand->chip);
 		return ret;
 	}
 
 	return 0;
 }
 
-static int rb4xx_nand_remove(struct platform_device *pdev)
+static void rb4xx_nand_remove(struct platform_device *pdev)
 {
 	struct rb4xx_nand *nand = platform_get_drvdata(pdev);
 
-	nand_release(&nand->chip);
-
-	return 0;
+	mtd_device_unregister(nand_to_mtd(&nand->chip));
+	nand_cleanup(&nand->chip);
 }
-
-static const struct platform_device_id rb4xx_nand_id_table[] = {
-	{ "mikrotik,rb4xx-nand", },
-	{ },
-};
-MODULE_DEVICE_TABLE(platform, rb4xx_nand_id_table);
 
 static struct platform_driver rb4xx_nand_driver = {
 	.probe = rb4xx_nand_probe,
-	.remove = rb4xx_nand_remove,
-	.id_table = rb4xx_nand_id_table,
+	.remove_new = rb4xx_nand_remove,
 	.driver = {
 		.name = "rb4xx-nand",
 	},

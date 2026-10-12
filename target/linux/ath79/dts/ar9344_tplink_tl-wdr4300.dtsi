@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later OR MIT
 
 #include "ar9344_tplink_tl-wdrxxxx.dtsi"
+#include <dt-bindings/leds/common.h>
 
 / {
 	aliases {
@@ -53,25 +54,21 @@
 };
 
 &usb {
+	status = "okay";
+};
+
+&hub_port {
 	#address-cells = <1>;
 	#size-cells = <0>;
-	status = "okay";
 
-	port@1 {
-		#address-cells = <1>;
-		#size-cells = <0>;
+	hub_port1: port@1 {
 		reg = <1>;
 		#trigger-source-cells = <0>;
+	};
 
-		hub_port1: port@1 {
-			reg = <1>;
-			#trigger-source-cells = <0>;
-		};
-
-		hub_port2: port@2 {
-			reg = <2>;
-			#trigger-source-cells = <0>;
-		};
+	hub_port2: port@2 {
+		reg = <2>;
+		#trigger-source-cells = <0>;
 	};
 };
 
@@ -79,23 +76,34 @@
 	status = "okay";
 };
 
-&ath9k {
-	mtd-mac-address = <&uboot 0x1fc00>;
+&wmac {
+	status = "okay";
+	nvmem-cells = <&macaddr_uboot_1fc00 (-1)>, <&cal_art_1000>;
+	nvmem-cell-names = "mac-address", "calibration";
 };
 
-&wmac {
-	mtd-mac-address = <&uboot 0x1fc00>;
-	mtd-mac-address-increment = <(-1)>;
+&pcie {
+	status = "okay";
+
+	ath9k: wifi@0,0 {
+		compatible = "pci168c,0033";
+		reg = <0x0000 0 0 0 0>;
+		nvmem-cells = <&macaddr_uboot_1fc00 0>, <&cal_art_5000>;
+		nvmem-cell-names = "mac-address", "calibration";
+
+		led {
+			led-sources = <0>;
+			led-active-low;
+		};
+	};
 };
 
 &mdio0 {
 	status = "okay";
 
-	phy-mask = <0>;
-
-	phy0: ethernet-phy@0 {
-		reg = <0>;
-		phy-mode = "rgmii";
+	switch@1f {
+		compatible = "qca,ar8327";
+		reg = <0x1f>;
 
 		qca,ar8327-initvals = <
 			0x04 0x07600000 /* PORT0 PAD MODE CTRL */
@@ -106,6 +114,47 @@
 			0x5c 0x0030c300 /* LED_CTRL3 */
 			0x7c 0x0000007e /* PORT0_STATUS */
 			>;
+
+		leds {
+			led@0 {
+				reg = <0>;
+				color = <LED_COLOR_ID_GREEN>;
+				function = LED_FUNCTION_WAN;
+				qca,led-mode = <0>;
+			};
+
+			led@3 {
+				reg = <3>;
+				color = <LED_COLOR_ID_GREEN>;
+				function = LED_FUNCTION_LAN;
+				function-enumerator = <1>;
+				qca,led-mode = <0>;
+			};
+
+			led@6 {
+				reg = <6>;
+				color = <LED_COLOR_ID_GREEN>;
+				function = LED_FUNCTION_LAN;
+				function-enumerator = <2>;
+				qca,led-mode = <0>;
+			};
+
+			led@9 {
+				reg = <9>;
+				color = <LED_COLOR_ID_GREEN>;
+				function = LED_FUNCTION_LAN;
+				function-enumerator = <3>;
+				qca,led-mode = <0>;
+			};
+
+			led@12 {
+				reg = <12>;
+				color = <LED_COLOR_ID_GREEN>;
+				function = LED_FUNCTION_LAN;
+				function-enumerator = <4>;
+				qca,led-mode = <0>;
+			};
+		};
 	};
 };
 
@@ -115,8 +164,13 @@
 	/* default for ar934x, except for 1000M */
 	pll-data = <0x06000000 0x00000101 0x00001616>;
 
-	mtd-mac-address = <&uboot 0x1fc00>;
+	nvmem-cells = <&macaddr_uboot_1fc00 0>;
+	nvmem-cell-names = "mac-address";
 
 	phy-mode = "rgmii";
-	phy-handle = <&phy0>;
+
+	fixed-link {
+		speed = <1000>;
+		full-duplex;
+	};
 };

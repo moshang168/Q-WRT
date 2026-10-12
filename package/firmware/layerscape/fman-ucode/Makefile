@@ -8,13 +8,13 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=fman-ucode
-PKG_VERSION:=LSDK-20.04
-PKG_RELEASE:=2
+PKG_VERSION:=6.12.20.2.0.0
+PKG_RELEASE:=1
 
 PKG_SOURCE_PROTO:=git
-PKG_SOURCE_URL:=https://github.com/NXP/qoriq-fm-ucode.git
-PKG_SOURCE_VERSION:=c275e91392e2adab1ed22f3867b8269ca3c54014
-PKG_MIRROR_HASH:=90b619ed501462b92f34f2fabfa09d6aaa5235990891d1c3132821c7d18a39bd
+PKG_SOURCE_URL:=https://github.com/nxp-qoriq/qoriq-fm-ucode
+PKG_SOURCE_VERSION:=lf-6.12.20-2.0.0
+PKG_MIRROR_HASH:=15b5df228b23b4cbdd1af484c98069b558d32ece15a80f0dabe22af6e5ee1ba1
 
 PKG_FLAGS:=nonshared
 
@@ -24,7 +24,9 @@ define Package/layerscape-fman
   SECTION:=firmware
   CATEGORY:=Firmware
   TITLE:=NXP FMan ucode
-  DEPENDS:=@TARGET_layerscape
+  DEPENDS:=@TARGET_layerscape||TARGET_qoriq
+  DEFAULT:=y if TARGET_layerscape_armv8_64b||TARGET_qoriq
+  HIDDEN:=1
 endef
 
 define Build/Compile
@@ -36,6 +38,8 @@ define Build/InstallDev
 		$(STAGING_DIR_IMAGE)/fsl_ls1043a-rdb-fman.bin
 	$(CP) $(PKG_BUILD_DIR)/fsl_fman_ucode_ls1046_r1.0_106_4_18.bin \
 		$(STAGING_DIR_IMAGE)/fsl_ls1046a-rdb-fman.bin
+	$(CP) $(PKG_BUILD_DIR)/fsl_fman_ucode_t4240_r2.0_106_4_18.bin \
+		$(STAGING_DIR_IMAGE)/fsl_t4240-rdb-fman.bin
 endef
 
 $(eval $(call BuildPackage,layerscape-fman))

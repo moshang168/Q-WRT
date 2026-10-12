@@ -8,13 +8,13 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=ls-dpl
-PKG_VERSION:=LSDK-20.04
-PKG_RELEASE:=$(AUTORELEASE)
+PKG_VERSION:=10.39.0
+PKG_RELEASE:=1
 
 PKG_SOURCE_PROTO:=git
-PKG_SOURCE_URL:=https://source.codeaurora.org/external/qoriq/qoriq-components/mc-utils
-PKG_SOURCE_VERSION:=8672a5f5abcd3a354dcab07e03f2a8a69b2e962d
-PKG_MIRROR_HASH:=4b8ad3148aee1e0c034206543472aebb435655fd03a661c4c1be545dcac7ddf0
+PKG_SOURCE_URL:=https://github.com/nxp-qoriq/mc-utils
+PKG_SOURCE_VERSION:=mc_release_10.39.0
+PKG_MIRROR_HASH:=48e0ad66f536689bf8cfd115420422a1c746cd609816bd9b07ef8ef358a85cf4
 
 PKG_FLAGS:=nonshared
 
@@ -26,6 +26,8 @@ define Package/layerscape-dpl
   CATEGORY:=Firmware
   TITLE:=NXP DPL firmware
   DEPENDS:=@TARGET_layerscape
+  DEFAULT:=y if TARGET_layerscape_armv8_64b
+  HIDDEN:=1
 endef
 
 MAKE_PATH:=config
@@ -34,17 +36,17 @@ MAKE_VARS+= \
 
 define Build/InstallDev
 	$(INSTALL_DIR) $(STAGING_DIR_IMAGE)
-	$(CP) $(PKG_BUILD_DIR)/config/ls1088a/RDB/dpl-eth.0x1D_0x0D.dtb \
+	$(CP) $(PKG_BUILD_DIR)/config/ls1088a/LS1088A-RDB/dpl-eth.0x1D_0x0D.dtb \
 		$(STAGING_DIR_IMAGE)/fsl_ls1088a-rdb-dpl.dtb
-	$(CP) $(PKG_BUILD_DIR)/config/ls1088a/RDB/dpc.0x1D-0x0D.dtb \
+	$(CP) $(PKG_BUILD_DIR)/config/ls1088a/LS1088A-RDB/dpc.0x1D-0x0D.dtb \
 		$(STAGING_DIR_IMAGE)/fsl_ls1088a-rdb-dpc.dtb
-	$(CP) $(PKG_BUILD_DIR)/config/ls2088a/RDB/dpl-eth.0x2A_0x41.dtb \
+	$(CP) $(PKG_BUILD_DIR)/config/ls2088a/LS2088A-RDB/dpl-eth.0x2A_0x41.dtb \
 		$(STAGING_DIR_IMAGE)/fsl_ls2088a-rdb-dpl.dtb
-	$(CP) $(PKG_BUILD_DIR)/config/ls2088a/RDB/dpc.0x2A_0x41.dtb \
+	$(CP) $(PKG_BUILD_DIR)/config/ls2088a/LS2088A-RDB/dpc.0x2A_0x41.dtb \
 		$(STAGING_DIR_IMAGE)/fsl_ls2088a-rdb-dpc.dtb
-	$(CP) $(PKG_BUILD_DIR)/config/lx2160a/RDB/dpl-eth.19.dtb \
+	$(CP) $(PKG_BUILD_DIR)/config/lx2160a/LX2160A-RDB/dpl-eth.19.dtb \
 		$(STAGING_DIR_IMAGE)/fsl_lx2160a-rdb-dpl.dtb
-	$(CP) $(PKG_BUILD_DIR)/config/lx2160a/RDB/dpc-usxgmii.dtb \
+	$(CP) $(PKG_BUILD_DIR)/config/lx2160a/LX2160A-RDB/dpc-usxgmii.dtb \
 		$(STAGING_DIR_IMAGE)/fsl_lx2160a-rdb-dpc.dtb
 endef
 

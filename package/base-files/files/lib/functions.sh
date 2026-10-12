@@ -16,6 +16,13 @@ NO_EXPORT=1
 LOAD_STATE=1
 LIST_SEP=" "
 
+# check for valid hexdump and strip common separators and leading/trailing blanks
+# input can be single- or multi-line, separators can be none, dash, colon or one or more spaces/tabs
+hexdump_2hex() {
+	[ -z "$1" ] && return
+	echo -n "$1" | tr '\nA-F' ' a-f' | sed -nr '/^\s*[0-9a-f]{2}((\s+|[:-]?)[0-9a-f]{2})*\s*$/s/[[:space:]:-]*//pg'
+}
+
 # xor multiple hex values of the same length
 xor() {
 	local val
@@ -32,12 +39,44 @@ xor() {
 	printf "%0${retlen}x" "$ret"
 }
 
+data_2bin() {
+	local data=$1
+	local len=${#1}
+	local bin_data
+
+	for i in $(seq 0 2 $(($len - 1))); do
+		bin_data="${bin_data}\x${data:i:2}"
+	done
+
+	echo -ne $bin_data
+}
+
+data_2xor_val() {
+	local data=$1
+	local len=${#1}
+	local xor_data
+
+	for i in $(seq 0 4 $(($len - 1))); do
+		xor_data="${xor_data}${data:i:4} "
+	done
+
+	echo -n ${xor_data:0:-1}
+}
+
 append() {
 	local var="$1"
 	local value="$2"
 	local sep="${3:- }"
 
 	eval "export ${NO_EXPORT:+-n} -- \"$var=\${$var:+\${$var}\${value:+\$sep}}\$value\""
+}
+
+prepend() {
+	local var="$1"
+	local value="$2"
+	local sep="${3:- }"
+
+	eval "export ${NO_EXPORT:+-n} -- \"$var=\$value\${$var:+\${sep}\${$var}}\""
 }
 
 list_contains() {
@@ -179,8 +218,14 @@ config_list_foreach() {
 
 default_prerm() {
 	local root="${IPKG_INSTROOT}"
-	local pkgname="$(basename ${1%.*})"
+	[ -z "$pkgname" ] && local pkgname="$(basename ${1%.*})"
 	local ret=0
+	local filelist="${root}/usr/lib/opkg/info/${pkgname}.list"
+	[ -f "$root/lib/apk/packages/${pkgname}.list" ] && filelist="$root/lib/apk/packages/${pkgname}.list"
+
+	if [ -e "$root/lib/apk/packages/${pkgname}.alternatives" ]; then
+		update_alternatives remove "${pkgname}"
+	fi
 
 	if [ -f "$root/usr/lib/opkg/info/${pkgname}.prerm-pkg" ]; then
 		( . "$root/usr/lib/opkg/info/${pkgname}.prerm-pkg" )
@@ -188,7 +233,7 @@ default_prerm() {
 	fi
 
 	local shell="$(command -v bash)"
-	for i in $(grep -s "^/etc/init.d/" "$root/usr/lib/opkg/info/${pkgname}.list"); do
+	for i in $(grep -s "^/etc/init.d/" "$filelist"); do
 		if [ -n "$root" ]; then
 			${shell:-/bin/sh} "$root/etc/rc.common" "$root$i" disable
 		else
@@ -203,16 +248,19 @@ default_prerm() {
 }
 
 add_group_and_user() {
-	local pkgname="$1"
+	[ -z "$pkgname" ] && local pkgname="$(basename ${1%.*})"
 	local rusers="$(sed -ne 's/^Require-User: *//p' $root/usr/lib/opkg/info/${pkgname}.control 2>/dev/null)"
+	if [ -f "$root/lib/apk/packages/${pkgname}.rusers" ]; then
+		local rusers="$(cat $root/lib/apk/packages/${pkgname}.rusers)"
+	fi
 
 	if [ -n "$rusers" ]; then
 		local tuple oIFS="$IFS"
 		for tuple in $rusers; do
-			local uid gid uname gname
+			local uid gid uname gname addngroups addngroup addngname addngid
 
 			IFS=":"
-			set -- $tuple; uname="$1"; gname="$2"
+			set -- $tuple; uname="$1"; gname="$2"; addngroups="$3"
 			IFS="="
 			set -- $uname; uname="$1"; uid="$2"
 			set -- $gname; gname="$1"; gid="$2"
@@ -232,22 +280,91 @@ add_group_and_user() {
 				group_add_user "$gname" "$uname"
 			fi
 
-			unset uid gid uname gname
+			if [ -n "$uname" ] &&  [ -n "$addngroups" ]; then
+				oIFS="$IFS"
+				IFS=","
+				for addngroup in $addngroups ; do
+					IFS="="
+					set -- $addngroup; addngname="$1"; addngid="$2"
+					if [ -n "$addngid" ]; then
+						group_exists "$addngname" || group_add "$addngname" "$addngid"
+					else
+						group_add_next "$addngname"
+					fi
+
+					group_add_user "$addngname" "$uname"
+				done
+				IFS="$oIFS"
+			fi
+
+			unset uid gid uname gname addngroups addngroup addngname addngid
+		done
+	fi
+}
+
+update_alternatives() {
+	local root="${IPKG_INSTROOT}"
+	local action="$1"
+	local pkgname="$2"
+
+	if [ -f "$root/lib/apk/packages/${pkgname}.alternatives" ]; then
+		for pkg_alt in $(cat $root/lib/apk/packages/${pkgname}.alternatives); do
+			local best_prio=0;
+			local best_src="/bin/busybox";
+			pkg_prio=${pkg_alt%%:*};
+			pkg_target=${pkg_alt#*:};
+			pkg_target=${pkg_target%:*};
+			pkg_src=${pkg_alt##*:};
+
+			if [ -e "$root/$target" ]; then
+				for alts in $root/lib/apk/packages/*.alternatives; do
+					for alt in $(cat $alts); do
+						prio=${alt%%:*};
+						target=${alt#*:};
+						target=${target%:*};
+						src=${alt##*:};
+
+						if [ "$target" = "$pkg_target" ] &&
+						   [ "$src" != "$pkg_src" ] &&
+						   [ "$best_prio" -lt "$prio" ]; then
+							best_prio=$prio;
+							best_src=$src;
+						fi
+					done
+				done
+			fi
+			case "$action" in
+				install)
+					if [ "$best_prio" -lt "$pkg_prio" ]; then
+						ln -sf "$pkg_src" "$root/$pkg_target"
+						echo "add alternative: $pkg_target -> $pkg_src"
+					fi
+				;;
+				remove)
+					if [ "$best_prio" -lt "$pkg_prio" ]; then
+						ln -sf "$best_src" "$root/$pkg_target"
+						echo "add alternative: $pkg_target -> $best_src"
+					fi
+				;;
+			esac
 		done
 	fi
 }
 
 default_postinst() {
 	local root="${IPKG_INSTROOT}"
-	local pkgname="$(basename ${1%.*})"
-	local filelist="/usr/lib/opkg/info/${pkgname}.list"
+	[ -z "$pkgname" ] && local pkgname="$(basename ${1%.*})"
+	local filelist="${root}/usr/lib/opkg/info/${pkgname}.list"
+	[ -f "$root/lib/apk/packages/${pkgname}.list" ] && filelist="$root/lib/apk/packages/${pkgname}.list"
 	local ret=0
 
-	add_group_and_user "${pkgname}"
+	if [ -e "${root}/usr/lib/opkg/info/${pkgname}.list" ]; then
+		filelist="${root}/usr/lib/opkg/info/${pkgname}.list"
+		add_group_and_user "${pkgname}"
+	fi
 
-	if [ -f "$root/usr/lib/opkg/info/${pkgname}.postinst-pkg" ]; then
-		( . "$root/usr/lib/opkg/info/${pkgname}.postinst-pkg" )
-		ret=$?
+	if [ -e "${root}/lib/apk/packages/${pkgname}.alternatives" ]; then
+		update_alternatives install "${pkgname}"
 	fi
 
 	if [ -d "$root/rootfs-overlay" ]; then
@@ -272,11 +389,16 @@ default_postinst() {
 			uci commit
 		fi
 
-		rm -f /tmp/luci-indexcache
+		rm -f /tmp/luci-indexcache.*
+	fi
+
+	if [ -f "$root/usr/lib/opkg/info/${pkgname}.postinst-pkg" ]; then
+		( . "$root/usr/lib/opkg/info/${pkgname}.postinst-pkg" )
+		ret=$?
 	fi
 
 	local shell="$(command -v bash)"
-	for i in $(grep -s "^/etc/init.d/" "$root$filelist"); do
+	for i in $(grep -s "^/etc/init.d/" "$filelist"); do
 		if [ -n "$root" ]; then
 			${shell:-/bin/sh} "$root/etc/rc.common" "$root$i" enable
 		else
@@ -298,6 +420,11 @@ include() {
 	done
 }
 
+ipcalc() {
+	set -- $(ipcalc.sh "$@")
+	[ $? -eq 0 ] && export -- "$@"
+}
+
 find_mtd_index() {
 	local PART="$(grep "\"$1\"" /proc/mtd | awk -F: '{print $1}')"
 	local INDEX="${PART##mtd}"
@@ -311,6 +438,25 @@ find_mtd_part() {
 
 	[ -d /dev/mtdblock ] && PREFIX=/dev/mtdblock/
 	echo "${INDEX:+$PREFIX$INDEX}"
+}
+
+find_mmc_part() {
+	local DEVNAME PARTNAME ROOTDEV
+
+	if grep -q "$1" /proc/mtd; then
+		echo "" && return 0
+	fi
+
+	if [ -n "$2" ]; then
+		ROOTDEV="$2"
+	else
+		ROOTDEV="mmcblk*"
+	fi
+
+	for DEVNAME in /sys/block/$ROOTDEV/mmcblk*p*; do
+		PARTNAME="$(grep PARTNAME ${DEVNAME}/uevent | cut -f2 -d'=' 2>/dev/null)"
+		[ "$PARTNAME" = "$1" ] && echo "/dev/$(basename $DEVNAME)" && return 0
+	done
 }
 
 group_add() {
@@ -335,7 +481,7 @@ group_add_next() {
 		return
 	fi
 	gids=$(cut -d: -f3 ${IPKG_INSTROOT}/etc/group)
-	gid=65536
+	gid=32768
 	while echo "$gids" | grep -q "^$gid$"; do
 		gid=$((gid + 1))
 	done
@@ -350,6 +496,9 @@ group_add_user() {
 	echo "$grp" | grep -q ":$" && delim=""
 	[ -n "$IPKG_INSTROOT" ] || lock /var/lock/passwd
 	sed -i "s/$grp/$grp$delim$2/g" ${IPKG_INSTROOT}/etc/group
+	if [ -z "$IPKG_INSTROOT" ] && [ -x /usr/sbin/selinuxenabled ] && selinuxenabled; then
+		restorecon /etc/group
+	fi
 	[ -n "$IPKG_INSTROOT" ] || lock -u /var/lock/passwd
 }
 
@@ -363,7 +512,7 @@ user_add() {
 	local rc
 	[ -z "$uid" ] && {
 		uids=$(cut -d: -f3 ${IPKG_INSTROOT}/etc/passwd)
-		uid=65536
+		uid=32768
 		while echo "$uids" | grep -q "^$uid$"; do
 			uid=$((uid + 1))
 		done
@@ -384,4 +533,14 @@ board_name() {
 	[ -e /tmp/sysinfo/board_name ] && cat /tmp/sysinfo/board_name || echo "generic"
 }
 
-[ -z "$IPKG_INSTROOT" ] && [ -f /lib/config/uci.sh ] && . /lib/config/uci.sh
+cmdline_get_var() {
+	local var=$1
+	local cmdlinevar tmp
+
+	for cmdlinevar in $(cat /proc/cmdline); do
+		tmp=${cmdlinevar##${var}}
+		[ "=" = "${tmp:0:1}" ] && echo ${tmp:1}
+	done
+}
+
+[ -z "$IPKG_INSTROOT" ] && [ -f /lib/config/uci.sh ] && . /lib/config/uci.sh || true

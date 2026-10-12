@@ -1,14 +1,15 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=libubox
-PKG_RELEASE=2
+PKG_RELEASE=1
 
 PKG_SOURCE_PROTO:=git
 PKG_SOURCE_URL=$(PROJECT_GIT)/project/libubox.git
-PKG_MIRROR_HASH:=7dd1db1e0074a9c7c722db654cce3111b3bd3cff0bfd791c4497cb0f6c22d3ca
-PKG_SOURCE_DATE:=2021-05-16
-PKG_SOURCE_VERSION:=b14c4688612c05c78ce984d7bde633bce8703b1e
-PKG_ABI_VERSION:=$(call abi_version_str,$(PKG_SOURCE_DATE))
+PKG_MIRROR_HASH:=82f1a83069c0636722fc1c57d567a21f8b14d14904c8bf10059d2a467edd2a10
+PKG_SOURCE_DATE:=2026-06-19
+PKG_SOURCE_VERSION:=7dd127841e82eb1cfb61185da37dde7b9bd9ba6d
+# PKG_ABI_VERSION:=$(call abi_version_str,$(PKG_SOURCE_DATE))
+PKG_ABI_VERSION:=20260213
 CMAKE_INSTALL:=1
 
 PKG_LICENSE:=ISC
@@ -67,7 +68,7 @@ define Package/libubox-lua
 endef
 
 TARGET_CFLAGS += -I$(STAGING_DIR)/usr/include
-CMAKE_OPTIONS = \
+CMAKE_OPTIONS += \
 	-DLUAPATH=/usr/lib/lua \
 	-DABIVERSION="$(PKG_ABI_VERSION)"
 
@@ -104,6 +105,14 @@ CMAKE_HOST_OPTIONS += \
 	-DCMAKE_SKIP_RPATH=FALSE \
 	-DCMAKE_MACOSX_RPATH=1 \
 	-DCMAKE_INSTALL_RPATH="${STAGING_DIR_HOST}/lib" \
+
+ifeq ($(HOST_OS),Darwin)
+  define Host/Install
+	$(Host/Install/Default)
+	$(INSTALL_DIR) $(STAGING_DIR_HOSTPKG)/lib
+	cd "$(STAGING_DIR_HOSTPKG)/lib" && ln -sf ../../host/lib/libubox.* .
+  endef
+endif
 
 $(eval $(call BuildPackage,libubox))
 $(eval $(call BuildPackage,libblobmsg-json))

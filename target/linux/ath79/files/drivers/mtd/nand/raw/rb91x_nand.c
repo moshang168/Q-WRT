@@ -40,6 +40,7 @@ enum rb91x_nand_gpios {
 	RB91X_NAND_ALE, /* Address Latch Enable */
 	RB91X_NAND_NRW, /* Read/Write. Active low */
 	RB91X_NAND_NLE, /* Latch Enable. Active low */
+	RB91X_NAND_PDIS, /* Reset Key Poll Disable. Active high */
 
 	RB91X_NAND_GPIOS,
 };
@@ -55,6 +56,12 @@ static inline void rb91x_nand_latch_lock(struct rb91x_nand_drvdata *drvdata,
 					 int lock)
 {
 	gpiod_set_value_cansleep(drvdata->gpio[RB91X_NAND_NLE], lock);
+}
+
+static inline void rb91x_nand_rst_key_poll_disable(struct rb91x_nand_drvdata *drvdata,
+						   int disable)
+{
+	gpiod_set_value_cansleep(drvdata->gpio[RB91X_NAND_PDIS], disable);
 }
 
 static int rb91x_ooblayout_ecc(struct mtd_info *mtd, int section,
@@ -115,6 +122,7 @@ static void rb91x_nand_write(struct rb91x_nand_drvdata *drvdata,
 	unsigned i;
 
 	rb91x_nand_latch_lock(drvdata, 1);
+	rb91x_nand_rst_key_poll_disable(drvdata, 1);
 
 	oe_reg = __raw_readl(base + AR71XX_GPIO_REG_OE);
 	out_reg = __raw_readl(base + AR71XX_GPIO_REG_OUT);
@@ -146,6 +154,7 @@ static void rb91x_nand_write(struct rb91x_nand_drvdata *drvdata,
 	/* Flush write */
 	__raw_readl(base + AR71XX_GPIO_REG_OUT);
 
+	rb91x_nand_rst_key_poll_disable(drvdata, 0);
 	rb91x_nand_latch_lock(drvdata, 0);
 }
 
@@ -162,6 +171,7 @@ static void rb91x_nand_read(struct rb91x_nand_drvdata *drvdata,
 	gpiod_set_value_cansleep(drvdata->gpio[RB91X_NAND_READ], 1);
 
 	rb91x_nand_latch_lock(drvdata, 1);
+	rb91x_nand_rst_key_poll_disable(drvdata, 1);
 
 	/* Save registers */
 	oe_reg = __raw_readl(base + AR71XX_GPIO_REG_OE);
@@ -199,6 +209,7 @@ static void rb91x_nand_read(struct rb91x_nand_drvdata *drvdata,
 	/* Flush write */
 	__raw_readl(base + AR71XX_GPIO_REG_OUT);
 
+	rb91x_nand_rst_key_poll_disable(drvdata, 0);
 	rb91x_nand_latch_lock(drvdata, 0);
 
 	/* Disable read mode */
@@ -254,12 +265,8 @@ static void rb91x_nand_write_buf(struct nand_chip *chip, const u8 *buf, int len)
 
 static void rb91x_nand_release(struct rb91x_nand_drvdata *drvdata)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,8,0)
 	mtd_device_unregister(nand_to_mtd(&drvdata->chip));
 	nand_cleanup(&drvdata->chip);
-#else
-	nand_release(&drvdata->chip);
-#endif
 }
 
 static int rb91x_nand_probe(struct platform_device *pdev)
@@ -277,10 +284,8 @@ static int rb91x_nand_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, drvdata);
 
 	gpios = gpiod_get_array(dev, NULL, GPIOD_OUT_LOW);
-	if (IS_ERR(gpios)) {
-		dev_err(dev, "failed to get gpios: %d\n", (int)gpios);
-		return -EINVAL;
-	}
+	if (IS_ERR(gpios))
+		return dev_err_probe(dev, PTR_ERR(gpios), "failed to get gpios");
 
 	if (gpios->ndescs != RB91X_NAND_GPIOS) {
 		dev_err(dev, "expected %d gpios\n", RB91X_NAND_GPIOS);
@@ -304,13 +309,8 @@ static int rb91x_nand_probe(struct platform_device *pdev)
 	drvdata->chip.legacy.read_buf = rb91x_nand_read_buf;
 
 	drvdata->chip.legacy.chip_delay = 25;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,9,0)
 	drvdata->chip.ecc.engine_type      = NAND_ECC_ENGINE_TYPE_SOFT;
 	drvdata->chip.ecc.algo             = NAND_ECC_ALGO_HAMMING;
-#else
-	drvdata->chip.ecc.mode             = NAND_ECC_SOFT;
-	drvdata->chip.ecc.algo             = NAND_ECC_HAMMING;
-#endif
 	drvdata->chip.options = NAND_NO_SUBPAGE_WRITE;
 
 	r = nand_scan(&drvdata->chip, 1);
@@ -328,25 +328,18 @@ static int rb91x_nand_probe(struct platform_device *pdev)
 
 	r = mtd_device_register(mtd, NULL, 0);
 	if (r) {
-		dev_err(dev, "mtd_device_register() failed: %d\n",
-			r);
-		goto err_release_nand;
+		rb91x_nand_release(drvdata);
+		return dev_err_probe(dev, r, "mtd_device_register() failed");
 	}
 
 	return 0;
-
-err_release_nand:
-	rb91x_nand_release(drvdata);
-	return r;
 }
 
-static int rb91x_nand_remove(struct platform_device *pdev)
+static void rb91x_nand_remove(struct platform_device *pdev)
 {
 	struct rb91x_nand_drvdata *drvdata = platform_get_drvdata(pdev);
 
 	rb91x_nand_release(drvdata);
-
-	return 0;
 }
 
 static const struct of_device_id rb91x_nand_match[] = {
@@ -358,10 +351,9 @@ MODULE_DEVICE_TABLE(of, rb91x_nand_match);
 
 static struct platform_driver rb91x_nand_driver = {
 	.probe	= rb91x_nand_probe,
-	.remove	= rb91x_nand_remove,
+	.remove_new	= rb91x_nand_remove,
 	.driver	= {
 		.name	= "rb91x-nand",
-		.owner	= THIS_MODULE,
 		.of_match_table = rb91x_nand_match,
 	},
 };

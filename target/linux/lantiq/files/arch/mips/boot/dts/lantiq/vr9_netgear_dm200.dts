@@ -1,6 +1,7 @@
 #include "vr9.dtsi"
 
 #include <dt-bindings/input/input.h>
+#include <dt-bindings/leds/common.h>
 #include <dt-bindings/mips/lantiq_rcu_gphy.h>
 
 / {
@@ -37,7 +38,6 @@
 
 	gpio_export {
 		compatible = "gpio-export";
-		#size-cells = <0>;
 
 		annexa {
 			gpio-export,name = "annexa";
@@ -55,20 +55,24 @@
 		compatible = "gpio-leds";
 
 		power_amber: power_amber {
-			label = "amber:power";
+			function = LED_FUNCTION_POWER;
+			color = <LED_COLOR_ID_AMBER>;
 			gpios = <&gpio 0 GPIO_ACTIVE_HIGH>;
 		};
 		power_green: power_green {
-			label = "green:power";
+			function = LED_FUNCTION_POWER;
+			color = <LED_COLOR_ID_GREEN>;
 			gpios = <&gpio 1 GPIO_ACTIVE_HIGH>;
 		};
 
 		lan_amber {
-			label = "amber:lan";
+			function = LED_FUNCTION_LAN;
+			color = <LED_COLOR_ID_AMBER>;
 			gpios = <&gpio 33 GPIO_ACTIVE_HIGH>;
 		};
 		lan_green {
-			label = "green:lan";
+			function = LED_FUNCTION_LAN;
+			color = <LED_COLOR_ID_GREEN>;
 			gpios = <&gpio 11 GPIO_ACTIVE_HIGH>;
 		};
 
@@ -84,36 +88,39 @@
 };
 
 &eth0 {
-	lantiq,phys = <&gphy1>;
+	nvmem-cells = <&macaddr_art_0 0>;
+	nvmem-cell-names = "mac-address";
+};
 
-	interface@0 {
-		compatible = "lantiq,xrx200-pdi";
-		#address-cells = <1>;
-		#size-cells = <0>;
-		reg = <0>;
+&ppe {
+	nvmem-cells = <&macaddr_art_0 1>;
+	nvmem-cell-names = "mac-address";
+};
 
-		ethernet@4 {
-			compatible = "lantiq,xrx200-pdi-port";
-			reg = <4>;
-			phy-mode = "mii";
-			phy-handle = <&phy13>;
-		};
-	};
+/* This PHY is not used, but try to load the 100M FW too */
+&gphy0 {
+	status = "disabled";
 
-	mdio {
-		#address-cells = <1>;
-		#size-cells = <0>;
-		compatible = "lantiq,xrx200-mdio";
-
-		phy13: ethernet-phy@13 {
-			reg = <0x13>;
-			compatible = "lantiq,phy22f", "ethernet-phy-ieee802.3-c22";
-		};
-	};
+	lantiq,gphy-mode = <GPHY_MODE_FE>;
 };
 
 &gphy1 {
 	lantiq,gphy-mode = <GPHY_MODE_FE>;
+};
+
+&gswip_mdio {
+	phy13: ethernet-phy@13 {
+		reg = <0x13>;
+	};
+};
+
+&gswip_ports {
+	port@4 {
+		reg = <4>;
+		label = "lan";
+		phy-mode = "internal";
+		phy-handle = <&phy13>;
+	};
 };
 
 &pcie0 {
@@ -166,6 +173,18 @@
 				reg = <0x7f2000 0x1000>;
 				label = "ART";
 				read-only;
+
+				nvmem-layout {
+					compatible = "fixed-layout";
+					#address-cells = <1>;
+					#size-cells = <1>;
+
+					macaddr_art_0: macaddr@0 {
+						compatible = "mac-base";
+						reg = <0x0 0x6>;
+						#nvmem-cell-cells = <1>;
+					};
+				};
 			};
 
 			partition@7f3000 {

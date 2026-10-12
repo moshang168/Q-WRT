@@ -94,15 +94,20 @@ int mtdsize = 0;
 int erasesize = 0;
 int jffs2_skip_bytes=0;
 int mtdtype = 0;
+uint32_t opt_trxmagic = TRX_MAGIC;
 
-int mtd_open(const char *mtd, bool block)
+int mtd_open(const char *mtd, bool block, bool write_mode)
 {
 	FILE *fp;
 	char dev[PATH_MAX];
 	int i;
 	int ret;
-	int flags = O_RDWR | O_SYNC;
+	int flags = O_RDONLY;
 	char name[PATH_MAX];
+
+	if(write_mode) {
+		flags = O_RDWR | O_SYNC;
+	}
 
 	snprintf(name, sizeof(name), "\"%s\"", mtd);
 	if ((fp = fopen("/proc/mtd", "r"))) {
@@ -123,12 +128,12 @@ int mtd_open(const char *mtd, bool block)
 	return open(mtd, flags);
 }
 
-int mtd_check_open(const char *mtd)
+int mtd_check_open(const char *mtd, bool write_mode)
 {
 	struct mtd_info_user mtdInfo;
 	int fd;
 
-	fd = mtd_open(mtd, false);
+	fd = mtd_open(mtd, false, write_mode);
 	if(fd < 0) {
 		fprintf(stderr, "Could not open mtd device: %s\n", mtd);
 		return -1;
@@ -205,7 +210,7 @@ image_check(int imagefd, const char *mtd)
 
 	magic = ((uint32_t *)buf)[0];
 
-	if (be32_to_cpu(magic) == TRX_MAGIC)
+	if (be32_to_cpu(magic) == opt_trxmagic)
 		imageformat = MTD_IMAGE_FORMAT_TRX;
 	else if (be32_to_cpu(magic) == SEAMA_MAGIC)
 		imageformat = MTD_IMAGE_FORMAT_SEAMA;
@@ -252,7 +257,7 @@ static int mtd_check(const char *mtd)
 			next++;
 		}
 
-		fd = mtd_check_open(mtd);
+		fd = mtd_check_open(mtd, true);
 		if (fd < 0)
 			return 0;
 
@@ -289,7 +294,7 @@ mtd_unlock(const char *mtd)
 			next++;
 		}
 
-		fd = mtd_check_open(mtd);
+		fd = mtd_check_open(mtd, true);
 		if(fd < 0) {
 			fprintf(stderr, "Could not open mtd device: %s\n", mtd);
 			exit(1);
@@ -320,7 +325,7 @@ mtd_erase(const char *mtd)
 	if (quiet < 2)
 		fprintf(stderr, "Erasing %s ...\n", mtd);
 
-	fd = mtd_check_open(mtd);
+	fd = mtd_check_open(mtd, true);
 	if(fd < 0) {
 		fprintf(stderr, "Could not open mtd device: %s\n", mtd);
 		exit(1);
@@ -356,7 +361,7 @@ mtd_dump(const char *mtd, int part_offset, int size)
 	if (quiet < 2)
 		fprintf(stderr, "Dumping %s ...\n", mtd);
 
-	fd = mtd_check_open(mtd);
+	fd = mtd_check_open(mtd, false);
 	if(fd < 0) {
 		fprintf(stderr, "Could not open mtd device: %s\n", mtd);
 		return -1;
@@ -415,7 +420,7 @@ mtd_verify(const char *mtd, char *file)
 		return -1;
 	}
 
-	fd = mtd_check_open(mtd);
+	fd = mtd_check_open(mtd, false);
 	if(fd < 0) {
 		fprintf(stderr, "Could not open mtd device: %s\n", mtd);
 		return -1;
@@ -550,7 +555,7 @@ resume:
 		next++;
 	}
 
-	fd = mtd_check_open(mtd);
+	fd = mtd_check_open(mtd, true);
 	if(fd < 0) {
 		fprintf(stderr, "Could not open mtd device: %s\n", mtd);
 		exit(1);
@@ -769,6 +774,7 @@ static void usage(void)
 	fprintf(stderr, "Usage: mtd [<options> ...] <command> [<arguments> ...] <device>[:<device>...]\n\n"
 	"The device is in the format of mtdX (eg: mtd4) or its label.\n"
 	"mtd recognizes these commands:\n"
+	"        dump                    dump mtd device\n"	
 	"        unlock                  unlock the device\n"
 	"        refresh                 refresh mtd partition\n"
 	"        erase                   erase all data on device\n"
@@ -810,7 +816,11 @@ static void usage(void)
 	"        -l <length>             the length of data that we want to dump\n");
 	if (mtd_fixtrx) {
 	    fprintf(stderr,
-	"        -o offset               offset of the image header in the partition(for fixtrx)\n");
+	"        -M <magic>              magic number of the image header in the partition (for fixtrx)\n"
+	"        -o offset               offset of the image header in the partition (for dump / fixtrx)\n");
+	} else {
+	    fprintf(stderr,
+	"        -o offset               offset of the image header in the partition (for dump)\n");
 	}
 	if (mtd_fixtrx || mtd_fixseama || mtd_fixwrg || mtd_fixwrgg) {
 		fprintf(stderr,
@@ -877,7 +887,7 @@ int main (int argc, char **argv)
 #ifdef FIS_SUPPORT
 			"F:"
 #endif
-			"frnqe:d:s:j:p:o:c:t:l:")) != -1)
+			"frnqe:d:s:j:p:o:c:t:l:M:")) != -1)
 		switch (ch) {
 			case 'f':
 				force = 1;
@@ -926,6 +936,14 @@ int main (int argc, char **argv)
 				dump_len = strtoul(optarg, 0, 0);
 				if (errno) {
 					fprintf(stderr, "-l: illegal numeric string\n");
+					usage();
+				}
+				break;
+			case 'M':
+				errno = 0;
+				opt_trxmagic = strtoul(optarg, 0, 0);
+				if (errno) {
+					fprintf(stderr, "-M: illegal numeric string\n");
 					usage();
 				}
 				break;

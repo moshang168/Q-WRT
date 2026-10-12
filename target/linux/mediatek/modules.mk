@@ -18,7 +18,7 @@ $(eval $(call KernelPackage,ata-ahci-mtk))
 define KernelPackage/btmtkuart
   SUBMENU:=Other modules
   TITLE:=MediaTek HCI UART driver
-  DEPENDS:=@TARGET_mediatek_mt7622 +kmod-bluetooth +mt7622bt-firmware
+  DEPENDS:=@TARGET_mediatek_mt7622 +kmod-bluetooth +kmod-btmtk +mt7622bt-firmware
   KCONFIG:=CONFIG_BT_MTKUART
   FILES:= \
 	$(LINUX_DIR)/drivers/bluetooth/btmtkuart.ko
@@ -27,14 +27,27 @@ endef
 
 $(eval $(call KernelPackage,btmtkuart))
 
-define KernelPackage/sdhci-mtk
-  SUBMENU:=Other modules
-  TITLE:=Mediatek SDHCI driver
-  DEPENDS:=@TARGET_mediatek_mt7622 +kmod-sdhci
-  KCONFIG:=CONFIG_MMC_MTK 
+define KernelPackage/iio-mt6577-auxadc
+  TITLE:=Mediatek AUXADC driver
+  DEPENDS:=@(TARGET_mediatek_mt7622||TARGET_mediatek_filogic)
+  KCONFIG:=CONFIG_MEDIATEK_MT6577_AUXADC
   FILES:= \
-	$(LINUX_DIR)/drivers/mmc/host/mtk-sd.ko
-  AUTOLOAD:=$(call AutoProbe,mtk-sd,1)
+	$(LINUX_DIR)/drivers/iio/adc/mt6577_auxadc.ko
+  AUTOLOAD:=$(call AutoProbe,mt6577_auxadc)
+  $(call AddDepends/iio)
+endef
+$(eval $(call KernelPackage,iio-mt6577-auxadc))
+
+define KernelPackage/switch-rtl8367s
+  SUBMENU:=Network Devices
+  TITLE:=Realtek RTL8367S switch support
+  KCONFIG:= \
+	CONFIG_RTL8367S_GSW \
+	CONFIG_SWCONFIG=y
+  DEPENDS:=@TARGET_mediatek +kmod-swconfig
+  FILES:= \
+	$(LINUX_DIR)/drivers/net/phy/rtk/rtl8367s_gsw.ko
+  AUTOLOAD:=$(call AutoProbe,rtl8367s_gsw,1)
 endef
 
-$(eval $(call KernelPackage,sdhci-mtk))
+$(eval $(call KernelPackage,switch-rtl8367s))

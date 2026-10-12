@@ -1,21 +1,21 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=ath10k-ct
-PKG_RELEASE:=$(AUTORELEASE)
+PKG_RELEASE:=1
 
 PKG_LICENSE:=GPLv2
 PKG_LICENSE_FILES:=
 
 PKG_SOURCE_URL:=https://github.com/greearb/ath10k-ct.git
 PKG_SOURCE_PROTO:=git
-PKG_SOURCE_DATE:=2021-09-22
-PKG_SOURCE_VERSION:=e6a7d5b5b834737cd12e357b5efdc2e42d923bf6
-PKG_MIRROR_HASH:=62a1b97089d3561730656ef73beb3cd77231ec636645115cc1bbb3c6c84a6fe3
+PKG_SOURCE_DATE:=2025-12-01
+PKG_SOURCE_VERSION:=bb84e1597474a6db26f7681d6765fd3e69fff37e
+PKG_MIRROR_HASH:=76a950c4c5f02128f4225955b1ca0d1d8f6c68c3b0918c4bc2d1265698e939a6
 
-# Build the 5.10 ath10k-ct driver version.
+# Build the 6.14 ath10k-ct driver version.
 # Probably this should match as closely as
 # possible to whatever mac80211 backports version is being used.
-CT_KVER="-5.10"
+CT_KVER="-6.18"
 
 PKG_MAINTAINER:=Ben Greear <greearb@candelatech.com>
 PKG_BUILD_PARALLEL:=1
@@ -29,12 +29,12 @@ include $(INCLUDE_DIR)/package.mk
 define KernelPackage/ath10k-ct
   SUBMENU:=Wireless Drivers
   TITLE:=ath10k-ct driver optimized for CT ath10k firmware
-  DEPENDS:=+kmod-mac80211 +kmod-ath +@DRIVER_11N_SUPPORT +@DRIVER_11AC_SUPPORT @PCI_SUPPORT +kmod-hwmon-core
+  DEPENDS:=+kmod-mac80211 +kmod-ath +@DRIVER_11AC_SUPPORT @PCI_SUPPORT +kmod-hwmon-core +@PACKAGE_MAC80211_DEBUGFS
   FILES:=\
 	$(PKG_BUILD_DIR)/ath10k$(CT_KVER)/ath10k_pci.ko \
 	$(PKG_BUILD_DIR)/ath10k$(CT_KVER)/ath10k_core.ko
   AUTOLOAD:=$(call AutoProbe,ath10k_pci)
-  PROVIDES:=kmod-ath10k
+  PROVIDES:=@kmod-ath10k-any
   VARIANT:=regular
 endef
 
@@ -111,8 +111,7 @@ ifneq ($(findstring c,$(OPENWRT_VERBOSE)),)
 endif
 
 define Build/Compile
-	+$(MAKE) $(CT_MAKEDEFS) $(PKG_JOBS) -C "$(LINUX_DIR)" \
-		$(KERNEL_MAKE_FLAGS) \
+	+$(KERNEL_MAKE) $(CT_MAKEDEFS) $(PKG_JOBS) \
 		M="$(PKG_BUILD_DIR)/ath10k$(CT_KVER)" \
 		NOSTDINC_FLAGS="$(NOSTDINC_FLAGS)" \
 		modules

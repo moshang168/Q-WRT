@@ -225,15 +225,49 @@ define KernelPackage/sound-soc-imx
 	$(LINUX_DIR)/sound/soc/fsl/snd-soc-fsl-ssi.ko \
 	$(LINUX_DIR)/sound/soc/fsl/imx-pcm-dma.ko
   AUTOLOAD:=$(call AutoLoad,56,snd-soc-imx-audmux snd-soc-fsl-ssi snd-soc-imx-pcm)
-  DEPENDS:=@TARGET_imx6 +kmod-sound-soc-core
+  DEPENDS:=@TARGET_imx +kmod-sound-soc-core
   $(call AddDepends/sound)
 endef
 
 define KernelPackage/sound-soc-imx/description
- Support for i.MX6 Platform sound (ssi/audmux/pcm)
+ Support for i.MX Platform sound (ssi/audmux/pcm)
 endef
 
 $(eval $(call KernelPackage,sound-soc-imx))
+
+
+define KernelPackage/sound-soc-mt7986
+  TITLE:=MediaTek MT7986 Audio support
+  KCONFIG:=CONFIG_SND_SOC_MT7986 CONFIG_SND_SOC_MT7986_WM8960
+  FILES:= \
+	$(LINUX_DIR)/sound/soc/mediatek/common/snd-soc-mtk-common.ko \
+	$(LINUX_DIR)/sound/soc/mediatek/mt7986/snd-soc-mt7986-afe.ko
+  AUTOLOAD:=$(call AutoLoad,56,snd-soc-mtk-common snd-soc-mt7986-afe)
+  DEPENDS:=@TARGET_mediatek_filogic +kmod-sound-soc-core
+  $(call AddDepends/sound)
+endef
+
+define KernelPackage/sound-soc-mt7986/description
+ Support for audio on systems using the MediaTek MT7986 SoC.
+endef
+
+$(eval $(call KernelPackage,sound-soc-mt7986))
+
+
+define KernelPackage/sound-soc-mt7986-wm8960
+  TITLE:=MediaTek MT7986 Audio support
+  KCONFIG:=CONFIG_SND_SOC_MT7986_WM8960
+  FILES:=$(LINUX_DIR)/sound/soc/mediatek/mt7986/mt7986-wm8960.ko
+  AUTOLOAD:=$(call AutoLoad,57,mt7986-wm8960)
+  DEPENDS:=@TARGET_mediatek_filogic +kmod-sound-soc-wm8960 +kmod-sound-soc-mt7986
+  $(call AddDepends/sound)
+endef
+
+define KernelPackage/sound-soc-mt7986-wm8960/description
+ Support for use of the Wolfson Audio WM8960 codec with the MediaTek MT7986 SoC.
+endef
+
+$(eval $(call KernelPackage,sound-soc-mt7986-wm8960))
 
 
 define KernelPackage/sound-soc-imx-sgtl5000
@@ -243,15 +277,27 @@ define KernelPackage/sound-soc-imx-sgtl5000
 	$(LINUX_DIR)/sound/soc/codecs/snd-soc-sgtl5000.ko \
 	$(LINUX_DIR)/sound/soc/fsl/snd-soc-imx-sgtl5000.ko
   AUTOLOAD:=$(call AutoLoad,57,snd-soc-sgtl5000 snd-soc-imx-sgtl5000)
-  DEPENDS:=@TARGET_imx6 +kmod-sound-soc-imx
+  DEPENDS:=@TARGET_imx +kmod-sound-soc-imx +kmod-regmap-i2c
   $(call AddDepends/sound)
 endef
 
 define KernelPackage/sound-soc-imx-sgtl5000/description
- Support for i.MX6 Platform sound SGTL5000 codec
+ Support for i.MX Platform sound SGTL5000 codec
 endef
 
 $(eval $(call KernelPackage,sound-soc-imx-sgtl5000))
+
+
+define KernelPackage/sound-soc-wm8960
+  TITLE:=SoC WM8960 codec support
+  KCONFIG:=CONFIG_SND_SOC_WM8960
+  FILES:=$(LINUX_DIR)/sound/soc/codecs/snd-soc-wm8960.ko
+  DEPENDS:=+kmod-sound-soc-core +kmod-i2c-core +kmod-regmap-i2c
+  AUTOLOAD:=$(call AutoProbe,snd-soc-wm8960)
+  $(call AddDepends/sound)
+endef
+
+$(eval $(call KernelPackage,sound-soc-wm8960))
 
 
 define KernelPackage/sound-soc-spdif
@@ -266,6 +312,17 @@ define KernelPackage/sound-soc-spdif
 endef
 
 $(eval $(call KernelPackage,sound-soc-spdif))
+
+
+define KernelPackage/sound-soc-dmic
+  TITLE:=Generic Digital Microphone CODEC
+  KCONFIG:=CONFIG_SND_SOC_DMIC
+  FILES:=$(LINUX_DIR)/sound/soc/codecs/snd-soc-dmic.ko
+  AUTOLOAD:=$(call AutoProbe,snd-soc-dmic)
+  $(call AddDepends/sound,+kmod-sound-soc-core)
+endef
+
+$(eval $(call KernelPackage,sound-soc-dmic))
 
 
 define KernelPackage/pcspkr
@@ -325,6 +382,19 @@ endef
 
 $(eval $(call KernelPackage,sound-hda-core))
 
+define KernelPackage/snd-hda-scodec-component
+  SUBMENU:=$(SOUND_MENU)
+  TITLE:= HD Audio Codec Component
+  KCONFIG:= \
+	CONFIG_SND_HDA_SCODEC_COMPONENT
+  FILES:= \
+	$(LINUX_DIR)/sound/pci/hda/snd-hda-scodec-component.ko
+  AUTOLOAD:=$(call AutoProbe,snd-hda-scodec-component)
+  $(call AddDepends/sound,kmod-sound-hda-core)
+endef
+
+$(eval $(call KernelPackage,snd-hda-scodec-component))
+
 define KernelPackage/sound-hda-codec-realtek
   SUBMENU:=$(SOUND_MENU)
   TITLE:= HD Audio Realtek Codec
@@ -333,7 +403,7 @@ define KernelPackage/sound-hda-codec-realtek
   FILES:= \
 	$(LINUX_DIR)/sound/pci/hda/snd-hda-codec-realtek.ko
   AUTOLOAD:=$(call AutoProbe,snd-hda-codec-realtek)
-  $(call AddDepends/sound,kmod-sound-hda-core)
+  $(call AddDepends/sound,kmod-sound-hda-core +kmod-snd-hda-scodec-component)
 endef
 
 define KernelPackage/sound-hda-codec-realtek/description
@@ -522,7 +592,7 @@ define KernelPackage/sound-hda-intel
 	CONFIG_SND_HDA_INTEL
   FILES:= \
 	$(LINUX_DIR)/sound/pci/hda/snd-hda-intel.ko \
-	$(LINUX_DIR)/sound/hda/snd-intel-nhlt.ko
+	$(LINUX_DIR)/sound/hda/snd-intel-dspcfg.ko
   AUTOLOAD:=$(call AutoProbe,snd-hda-intel)
   $(call AddDepends/sound,kmod-sound-hda-core)
 endef
@@ -532,3 +602,55 @@ define KernelPackage/sound-hda-intel/description
 endef
 
 $(eval $(call KernelPackage,sound-hda-intel))
+
+
+define KernelPackage/sound-midi2
+  TITLE:=MIDI 2.0 and UMP Support
+  KCONFIG:= \
+	CONFIG_SND_UMP=y  \
+	CONFIG_SND_UMP_LEGACY_RAWMIDI=y
+  FILES:=$(LINUX_DIR)/sound/core/snd-ump.ko
+  AUTOLOAD:=$(call AutoProbe,snd-ump)
+  $(call AddDepends/sound)
+endef
+
+define KernelPackage/sound-midi2/description
+ Kernel module for MIDI 2.0: sequencer, rawmidi, and USB-MIDI 2.0 support.
+endef
+
+$(eval $(call KernelPackage,sound-midi2))
+
+define KernelPackage/sound-midi2-seq
+  TITLE:=MIDI 2.0 and UMP Support for Sequencer
+  KCONFIG:= \
+	CONFIG_SND_SEQ_UMP=y \
+	CONFIG_SND_SEQ_UMP_CLIENT=y
+  DEPENDS:=+kmod-sound-midi2 +kmod-sound-seq
+  $(call AddDepends/sound)
+endef
+
+$(eval $(call KernelPackage,sound-midi2-seq))
+
+
+define KernelPackage/sound-midi2-usb
+  TITLE:=MIDI 2.0 and UMP Support for USB-MIDI
+  KCONFIG:=CONFIG_SND_USB_AUDIO_MIDI_V2=y
+  DEPENDS:=+kmod-sound-midi2 +kmod-usb-audio
+  $(call AddDepends/sound)
+endef
+
+$(eval $(call KernelPackage,sound-midi2-usb))
+
+
+define KernelPackage/sound-dynamic-minors
+  TITLE:=Support more than 8 audio and MIDI devices
+  KCONFIG:=CONFIG_SND_DYNAMIC_MINORS=y
+  $(call AddDepends/sound)
+endef
+
+define KernelPackage/sound-dynamic-minors/description
+ Kernel module for dynamic minor device support.
+ Required for using more than 8 audio and MIDI devices.
+endef
+
+$(eval $(call KernelPackage,sound-dynamic-minors))

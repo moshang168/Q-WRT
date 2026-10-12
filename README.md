@@ -1,5 +1,22 @@
 ![OpenWrt logo](include/logo.png)
 
+## Q-WRT firmware builds
+
+This tree is based on the OpenWrt 25.12.5 stable release. Its default kernel
+line is Linux 6.12 (6.12.94 in this release).
+
+To build a firmware image on GitHub, open **Actions**, choose one of these
+workflows, and select **Run workflow**:
+
+- **Build x86 firmware** builds generic x86_64 images for a PC or virtual
+  machine. Download the `q-wrt-x86_64-*` artifact from the completed run.
+- **Build NanoPi R2S firmware** builds images for the FriendlyElec NanoPi R2S
+  (Rockchip RK3328). Download the `q-wrt-nanopi-r2s-*` artifact from the
+  completed run.
+
+Firmware images are device-specific; use the R2S workflow for that board and
+the x86 workflow for x86_64 hardware.
+
 OpenWrt Project is a Linux operating system targeting embedded devices. Instead
 of trying to create a single, static firmware, OpenWrt provides a fully
 writable filesystem with package management. This frees you from the
@@ -11,9 +28,27 @@ full customization, to use the device in ways never envisioned.
 
 Sunshine!
 
+## Download
+
+Built firmware images are available for many architectures and come with a
+package selection to be used as WiFi home router. To quickly find a factory
+image usable to migrate from a vendor stock firmware to OpenWrt, try the
+*Firmware Selector*.
+
+* [OpenWrt Firmware Selector](https://firmware-selector.openwrt.org/)
+
+If your device is supported, please follow the **Info** link to see install
+instructions or consult the support resources listed below.
+
+## 
+
+An advanced user may require additional or specific package. (Toolchain, SDK, ...) For everything else than simple firmware download, try the wiki download page:
+
+* [OpenWrt Wiki Download](https://openwrt.org/downloads)
+
 ## Development
 
-To build your own firmware you need a GNU/Linux, BSD or MacOSX system (case
+To build your own firmware you need a GNU/Linux, BSD or macOS system (case
 sensitive filesystem required). Cygwin is unsupported because of the lack of a
 case sensitive file system.
 
@@ -25,8 +60,8 @@ the [Build System Setup](https://openwrt.org/docs/guide-developer/build-system/i
 documentation.
 
 ```
-gcc binutils bzip2 flex python3 perl make find grep diff unzip gawk getopt
-subversion libz-dev libc-dev rsync which
+binutils bzip2 diff find flex gawk gcc-6+ getopt grep install libc-dev libz-dev
+make4.1+ perl python3.7+ rsync subversion unzip which
 ```
 
 ### Quickstart
@@ -59,6 +94,9 @@ packages to OpenWrt, please find the fitting repository below.
 
 * [OpenWrt Routing](https://github.com/openwrt/routing): Packages specifically
   focused on (mesh) routing.
+
+* [OpenWrt Video](https://github.com/openwrt/video): Packages specifically
+  focused on display servers and clients (Xorg and Wayland).
 
 ## Support Information
 

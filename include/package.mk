@@ -11,27 +11,64 @@ include $(INCLUDE_DIR)/download.mk
 PKG_BUILD_DIR ?= $(BUILD_DIR)/$(if $(BUILD_VARIANT),$(PKG_NAME)-$(BUILD_VARIANT)/)$(PKG_NAME)$(if $(PKG_VERSION),-$(PKG_VERSION))
 PKG_INSTALL_DIR ?= $(PKG_BUILD_DIR)/ipkg-install
 PKG_BUILD_PARALLEL ?=
-PKG_USE_MIPS16 ?= 1
-PKG_IREMAP ?= 1
+PKG_SKIP_DOWNLOAD=$(USE_SOURCE_DIR)$(USE_GIT_TREE)$(USE_GIT_SRC_CHECKOUT)
 
 MAKE_J:=$(if $(MAKE_JOBSERVER),$(MAKE_JOBSERVER) $(if $(filter 3.% 4.0 4.1,$(MAKE_VERSION)),-j))
 
-PKG_SOURCE_DATE_EPOCH:=$(if $(DUMP),,$(shell $(TOPDIR)/scripts/get_source_date_epoch.sh $(CURDIR)))
+PKG_SOURCE_DATE_EPOCH = $(if $(DUMP),,$(shell $(TOPDIR)/scripts/get_source_date_epoch.sh \
+	$(if $(wildcard $(PKG_BUILD_DIR)/version.date),$(PKG_BUILD_DIR),$(CURDIR))))
 
 ifeq ($(strip $(PKG_BUILD_PARALLEL)),0)
 PKG_JOBS?=-j1
 else
 PKG_JOBS?=$(if $(PKG_BUILD_PARALLEL),$(MAKE_J),-j1)
 endif
-ifdef CONFIG_USE_MIPS16
-  ifeq ($(strip $(PKG_USE_MIPS16)),1)
-    TARGET_ASFLAGS_DEFAULT = $(filter-out -mips16 -minterlink-mips16,$(TARGET_CFLAGS))
-    TARGET_CFLAGS += -mips16 -minterlink-mips16
-  endif
+
+PKG_BUILD_FLAGS?=
+__unknown_flags=$(filter-out no-iremap no-mips16 gc-sections no-gc-sections lto no-lto no-mold,$(PKG_BUILD_FLAGS))
+ifneq ($(__unknown_flags),)
+  $(error unknown PKG_BUILD_FLAGS: $(__unknown_flags))
 endif
-ifeq ($(strip $(PKG_IREMAP)),1)
+
+# $1=flagname, $2=default (0/1)
+define pkg_build_flag
+$(if $(filter no-$(1),$(PKG_BUILD_FLAGS)),0,$(if $(filter $(1),$(PKG_BUILD_FLAGS)),1,$(2)))
+endef
+
+ifeq ($(call pkg_build_flag,iremap,1),1)
   IREMAP_CFLAGS = $(call iremap,$(PKG_BUILD_DIR),$(notdir $(PKG_BUILD_DIR)))
   TARGET_CFLAGS += $(IREMAP_CFLAGS)
+endif
+ifdef CONFIG_USE_MIPS16
+  ifeq ($(call pkg_build_flag,mips16,1),1)
+    TARGET_ASFLAGS_DEFAULT = $(filter-out -mips16 -minterlink-mips16,$(TARGET_CFLAGS))
+    TARGET_CFLAGS += -mips16 -minterlink-mips16
+    TARGET_CXXFLAGS += -mips16 -minterlink-mips16
+  endif
+endif
+ifeq ($(call pkg_build_flag,gc-sections,$(if $(CONFIG_USE_GC_SECTIONS),1,0)),1)
+  TARGET_CFLAGS+= -ffunction-sections -fdata-sections
+  TARGET_CXXFLAGS+= -ffunction-sections -fdata-sections
+  TARGET_LDFLAGS+= -Wl,--gc-sections
+endif
+ifeq ($(call pkg_build_flag,lto,$(if $(CONFIG_USE_LTO),1,0)),1)
+  TARGET_CFLAGS+= -flto=auto -fno-fat-lto-objects
+  TARGET_CXXFLAGS+= -flto=auto -fno-fat-lto-objects
+  TARGET_LDFLAGS+= -flto=auto -fuse-linker-plugin
+endif
+ifdef CONFIG_USE_MOLD
+  ifeq ($(call pkg_build_flag,mold,1),1)
+    TARGET_LINKER:=mold
+  endif
+endif
+
+# loongarch64 sets CONFIG_PAGE_SIZE_16KB, all other targets set CONFIG_PAGE_SIZE_4KB only.
+ifeq ($(ARCH),loongarch64)
+  TARGET_CFLAGS += -Wl,-z,max-page-size=16384
+  TARGET_LDFLAGS += -zmax-page-size=16384
+else
+  TARGET_CFLAGS += -Wl,-z,max-page-size=4096
+  TARGET_LDFLAGS += -zmax-page-size=4096
 endif
 
 include $(INCLUDE_DIR)/hardening.mk
@@ -107,9 +144,38 @@ endef
 
 PKG_INSTALL_STAMP:=$(PKG_INFO_DIR)/$(PKG_DIR_NAME).$(if $(BUILD_VARIANT),$(BUILD_VARIANT),default).install
 
+# Normalize package SOURCE entry to pack reproducible package
+# If we are packing a package with OpenWrt buildroot:
+# - Replace package/... with feeds/base/...
+# If we are packing a package with SDK:
+# - Replace feeds/.*_root/... with feeds/.*/... and remove
+#   the intermediate directory to reflect what the symbolic link
+#   points to.
+#   Example:
+#   Feed link: feeds/base_root/package -> feeds/base
+#   Package: feeds/base_root/package/system/uci -> feeds/base/system/uci
+ifeq ($(DUMP),)
+  __pkg_base_path:=$(patsubst $(TOPDIR)/%,%,$(CURDIR))
+  __pkg_provider_path:=$(word 1,$(subst /, ,$(__pkg_base_path)))
+  ifeq ($(__pkg_provider_path), feeds)
+    __pkg_feed_path:=$(word 2,$(subst /, ,$(__pkg_base_path)))
+    __pkg_feed_name:=$(patsubst %_root,%,$(__pkg_feed_path))
+    ifneq (__pkg_feed_path, __pkg_feed_name)
+      __pkg_feed_realpath:=$(realpath $(TOPDIR)/feeds/$(__pkg_feed_name))
+      __pkg_feed_dir:=$(patsubst $(TOPDIR)/feeds/$(__pkg_feed_path)/%,%,$(__pkg_feed_realpath))
+      __pkg_path:=$(patsubst feeds/$(__pkg_feed_path)/$(__pkg_feed_dir)/%,%,$(__pkg_base_path))
+    else
+      __pkg_path:=$(patsubst feeds/$(__pkg_feed_path)/%,%,$(__pkg_base_path))
+    endif
+    __pkg_source_makefile:=$(TOPDIR)/feeds/$(__pkg_feed_name)/$(__pkg_path)
+  else ifeq ($(__pkg_provider_path), package)
+    __pkg_source_makefile:=$(TOPDIR)/feeds/base/$(patsubst package/%,%,$(__pkg_base_path))
+  endif
+endif
+
 include $(INCLUDE_DIR)/package-defaults.mk
 include $(INCLUDE_DIR)/package-dumpinfo.mk
-include $(INCLUDE_DIR)/package-ipkg.mk
+include $(INCLUDE_DIR)/package-pack.mk
 include $(INCLUDE_DIR)/package-bin.mk
 include $(INCLUDE_DIR)/autotools.mk
 
@@ -172,6 +238,7 @@ define Build/Exports/Default
   $(1) : export CONFIG_SITE:=$$(CONFIG_SITE)
   $(1) : export PKG_CONFIG_PATH:=$$(PKG_CONFIG_PATH)
   $(1) : export PKG_CONFIG_LIBDIR:=$$(PKG_CONFIG_PATH)
+  $(1) : export GIT_CEILING_DIRECTORIES:=$$(BUILD_DIR)
 endef
 Build/Exports=$(Build/Exports/Default)
 
@@ -183,7 +250,7 @@ define Build/CoreTargets
   $(call Build/Autoclean)
   $(call DefaultTargets)
 
-  $(DL_DIR)/$(FILE): FORCE
+  $(call check_download_integrity)
 
   download:
 	$(foreach hook,$(Hooks/Download),
@@ -258,13 +325,13 @@ define Build/CoreTargets
   ifneq ($(CONFIG_AUTOREMOVE),)
     compile:
 		-touch -r $(PKG_BUILD_DIR)/.built $(PKG_BUILD_DIR)/.autoremove 2>/dev/null >/dev/null
-		$(FIND) $(PKG_BUILD_DIR) -mindepth 1 -maxdepth 1 -not '(' -type f -and -name '.*' -and -size 0 ')' -and -not -name '.pkgdir'  -print0 | \
+		$(FIND) $(PKG_BUILD_DIR) -mindepth 1 -maxdepth 1 -not '(' -type f -and -name '.*' -and -size 0 ')' -and -not -name '.pkgdir' -and -not -name 'version.date'  -print0 | \
 			$(XARGS) -0 rm -rf
   endif
 endef
 
 define Build/DefaultTargets
-  $(if $(USE_SOURCE_DIR)$(USE_GIT_TREE)$(USE_GIT_SRC_CHECKOUT),,$(if $(strip $(PKG_SOURCE_URL)),$(call Download,default)))
+  $(if $(PKG_SKIP_DOWNLOAD),,$(if $(strip $(PKG_SOURCE_URL)),$(call Download,default)))
   $(if $(DUMP),,$(Build/CoreTargets))
 
   define Build/DefaultTargets
@@ -274,6 +341,13 @@ endef
 define BuildPackage
   $(eval $(Package/Default))
   $(eval $(Package/$(1)))
+
+  # Add an implicit self-provide. apk can't handle self provides, be it
+  # versioned or virtual, so opt for a suffix instead. This allows several
+  # variants to provide the same virtual package without adding extra provides
+  # to the default one, e.g. wget implicitly provides wget-any and is marked as
+  # default, so wget-ssl can explicitly provide @wget-any as well.
+  $(eval PROVIDES:=$(strip @$(1)-any $(PROVIDES)))
 
 ifdef DESCRIPTION
 $$(error DESCRIPTION:= is obsolete, use Package/PKG_NAME/description)
@@ -315,7 +389,7 @@ endef
 
 Build/Prepare=$(call Build/Prepare/Default,)
 Build/Configure=$(call Build/Configure/Default,)
-Build/Compile=$(call Build/Compile/Default,)
+Build/Compile=$(call Build/Compile/Default,$(if $(PKG_SUBDIRS),SUBDIRS='$$$$(wildcard $(PKG_SUBDIRS))'))
 Build/Install=$(if $(PKG_INSTALL),$(call Build/Install/Default,))
 Build/Dist=$(call Build/Dist/Default,)
 Build/DistCheck=$(call Build/DistCheck/Default,)

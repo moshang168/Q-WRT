@@ -3,6 +3,7 @@
 #include "vr9.dtsi"
 
 #include <dt-bindings/input/input.h>
+#include <dt-bindings/leds/common.h>
 #include <dt-bindings/mips/lantiq_rcu_gphy.h>
 
 / {
@@ -48,102 +49,46 @@
 		compatible = "gpio-leds";
 
 		led_power_green: power_green {
-			label = "green:power";
+			function = LED_FUNCTION_POWER;
+			color = <LED_COLOR_ID_GREEN>;
 			gpios = <&gpio 32 GPIO_ACTIVE_LOW>;
 			default-state = "keep";
 		};
 
+		fon {
+			function = "fon";
+			color = <LED_COLOR_ID_GREEN>;
+			gpios = <&gpio 38 GPIO_ACTIVE_LOW>;
+		};
+
 		led_power_red: power_red {
-			label = "red:power";
+			function = LED_FUNCTION_POWER;
+			color = <LED_COLOR_ID_RED>;
 			gpios = <&gpio 33 GPIO_ACTIVE_LOW>;
 		};
 
 		led_info_green: info_green {
-			label = "green:info";
+			function = "info";
+			color = <LED_COLOR_ID_GREEN>;
 			gpios = <&gpio 47 GPIO_ACTIVE_LOW>;
 		};
 
 		led_wifi: wifi {
-			label = "green:wlan";
+			function = LED_FUNCTION_WLAN;
+			color = <LED_COLOR_ID_GREEN>;
 			gpios = <&gpio 36 GPIO_ACTIVE_LOW>;
 		};
 
 		info_red {
-			label = "red:info";
+			function = "info";
+			color = <LED_COLOR_ID_RED>;
 			gpios = <&gpio 34 GPIO_ACTIVE_LOW>;
 		};
 
 		dect {
-			label = "green:dect";
+			function = "dect";
+			color = <LED_COLOR_ID_GREEN>;
 			gpios = <&gpio 35 GPIO_ACTIVE_LOW>;
-		};
-	};
-};
-
-&eth0 {
-	interface@0 {
-		compatible = "lantiq,xrx200-pdi";
-		#address-cells = <1>;
-		#size-cells = <0>;
-		reg = <0>;
-		mtd-mac-address = <&urlader 0xa91>;
-		mtd-mac-address-increment = <(-2)>;
-		lantiq,switch;
-
-		ethernet@0 {
-			compatible = "lantiq,xrx200-pdi-port";
-			reg = <0>;
-			phy-mode = "rmii";
-			phy-handle = <&phy0>;
-		};
-
-		ethernet@1 {
-			compatible = "lantiq,xrx200-pdi-port";
-			reg = <1>;
-			phy-mode = "rmii";
-			phy-handle = <&phy1>;
-		};
-
-		ethernet@2 {
-			compatible = "lantiq,xrx200-pdi-port";
-			reg = <2>;
-			phy-mode = "gmii";
-			phy-handle = <&phy11>;
-		};
-
-		ethernet@4 {
-			compatible = "lantiq,xrx200-pdi-port";
-			reg = <4>;
-			phy-mode = "gmii";
-			phy-handle = <&phy13>;
-		};
-	};
-
-	mdio {
-		#address-cells = <1>;
-		#size-cells = <0>;
-		compatible = "lantiq,xrx200-mdio";
-
-		phy0: ethernet-phy@0 {
-			reg = <0x00>;
-			compatible = "ethernet-phy-ieee802.3-c22";
-			reset-gpios = <&gpio 37 GPIO_ACTIVE_LOW>;
-		};
-
-		phy1: ethernet-phy@1 {
-			reg = <0x01>;
-			compatible = "ethernet-phy-ieee802.3-c22";
-			reset-gpios = <&gpio 44 GPIO_ACTIVE_LOW>;
-		};
-
-		phy11: ethernet-phy@11 {
-			reg = <0x11>;
-			compatible = "lantiq,phy11g", "ethernet-phy-ieee802.3-c22";
-		};
-
-		phy13: ethernet-phy@13 {
-			reg = <0x13>;
-			compatible = "lantiq,phy11g", "ethernet-phy-ieee802.3-c22";
 		};
 	};
 };
@@ -156,23 +101,62 @@
 	lantiq,gphy-mode = <GPHY_MODE_GE>;
 };
 
-&gpio {
+&gswip {
+	pinctrl-0 = <&mdio_pins>;
 	pinctrl-names = "default";
-	pinctrl-0 = <&state_default>;
+};
 
-	state_default: pinmux {
-		phy-rst {
-			lantiq,pins = "io37", "io44";
-			lantiq,pull = <0>;
-			lantiq,open-drain;
-			lantiq,output = <1>;
-		};
+&gswip_mdio {
+	phy0: ethernet-phy@0 {
+		reg = <0x00>;
 	};
 
+	phy1: ethernet-phy@1 {
+		reg = <0x01>;
+	};
+
+	phy11: ethernet-phy@11 {
+		reg = <0x11>;
+	};
+
+	phy13: ethernet-phy@13 {
+		reg = <0x13>;
+	};
+};
+
+&gswip_ports {
+	port@0 {
+		reg = <0>;
+		label = "lan3";
+		phy-mode = "rmii";
+		phy-handle = <&phy0>;
+	};
+
+	port@1 {
+		reg = <1>;
+		label = "lan4";
+		phy-mode = "rmii";
+		phy-handle = <&phy1>;
+	};
+
+	port@2 {
+		reg = <2>;
+		label = "lan2";
+		phy-mode = "internal";
+		phy-handle = <&phy11>;
+	};
+
+	port@4 {
+		reg = <4>;
+		label = "lan1";
+		phy-mode = "internal";
+		phy-handle = <&phy13>;
+	};
 };
 
 &pcie0 {
 	status = "okay";
+	gpio-reset = <&gpio 21 GPIO_ACTIVE_LOW>;
 
 	pcie@0 {
 		reg = <0 0 0 0 0>;
@@ -181,10 +165,8 @@
 		#address-cells = <2>;
 		device_type = "pci";
 
-		wifi@168c,002e {
-			compatible = "pci168c,002e";
+		wifi: wifi@0,0 {
 			reg = <0 0 0 0 0>;
-			qca,no-eeprom; /* load from ath9k-eeprom-pci-0000:01:00.0.bin */
 		};
 	};
 };
