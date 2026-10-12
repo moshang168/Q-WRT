@@ -17,7 +17,7 @@ jobs:
 
     steps:
       - name: Check out source
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Install build dependencies
         run: |
@@ -45,7 +45,7 @@ jobs:
         run: make -j"$(nproc)" BUILD_LOG=1
 
       - name: Upload NanoPi R2S firmware images
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: q-wrt-nanopi-r2s-${{ github.run_number }}
           path: bin/targets/rockchip/armv8/**
