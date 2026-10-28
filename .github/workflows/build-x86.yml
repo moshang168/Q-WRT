@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
 
+env:
+  CCACHE_DIR: ${{ github.workspace }}/.ccache
+  CCACHE_MAXSIZE: 5G
+
 jobs:
   build:
     name: OpenWrt x86_64 generic
@@ -25,7 +29,13 @@ jobs:
           sudo apt-get install -y --no-install-recommends \
             build-essential clang flex bison g++ gawk gcc-multilib g++-multilib \
             gettext git libncurses-dev libssl-dev python3 python3-pyelftools python3-setuptools \
-            rsync swig unzip zlib1g-dev file wget libelf-dev
+            rsync swig unzip zlib1g-dev file wget libelf-dev ccache
+
+      - name: Cache source downloads
+        uses: actions/cache@v4
+        with:
+          path: dl
+          key: q-wrt-dl-x86_64-${{ runner.os }}-${{ hashFiles('feeds.conf.default') }}
 
       - name: Prepare feeds and x86_64 configuration
         run: |
@@ -36,8 +46,29 @@ jobs:
           CONFIG_TARGET_x86_64=y
           CONFIG_TARGET_x86_64_DEVICE_generic=y
           CONFIG_TARGET_ROOTFS_PARTSIZE=104
+          CONFIG_CCACHE=y
           EOF
           make defconfig
+          ccache --max-size "$CCACHE_MAXSIZE"
+
+      - name: Cache ccache objects
+        uses: actions/cache@v4
+        with:
+          path: .ccache
+          key: q-wrt-ccache-x86_64-${{ runner.os }}-${{ hashFiles('.config') }}
+          restore-keys: |
+            q-wrt-ccache-x86_64-${{ runner.os }}-
+
+      - name: Cache the x86_64 prebuilt toolchain
+        id: toolchain-cache
+        uses: actions/cache@v4
+        with:
+          path: staging_dir/toolchain-*
+          key: q-wrt-toolchain-x86_64-${{ runner.os }}-${{ hashFiles('.config', 'toolchain/**', 'include/**', 'rules.mk', 'target/linux/x86/**', 'scripts/**') }}
+
+      - name: Build toolchain on cache miss
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
+        run: make -j"$(nproc)" toolchain/install BUILD_LOG=1
 
       - name: Download sources
         run: make download -j"$(nproc)"
