@@ -1,0 +1,156 @@
+name: Publish Q-WRT firmware release
+
+description: Wait for the matching build of the other device, then publish both firmware bundles in one GitHub Release.
+
+inputs:
+  target:
+    description: Current build target (x86 or r2s).
+    required: true
+  current-artifact-prefix:
+    description: Artifact name prefix produced by this workflow.
+    required: true
+  peer-artifact-prefix:
+    description: Artifact name prefix produced by the other workflow.
+    required: true
+  peer-workflow:
+    description: Workflow file name for the other device build.
+    required: true
+  peer-job-name:
+    description: Exact job name of the other device build.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Find the matching build and wait for it to finish
+      id: matching-build
+      uses: actions/github-script@v8
+      timeout-minutes: 350
+      env:
+        TARGET: ${{ inputs.target }}
+        PEER_WORKFLOW: ${{ inputs.peer-workflow }}
+        PEER_JOB_NAME: ${{ inputs.peer-job-name }}
+      with:
+        github-token: ${{ github.token }}
+        script: |
+          const { owner, repo } = context.repo;
+          const sha = context.sha;
+          const branch = 'upgrade-openwrt-25.12';
+          const currentRunId = context.runId;
+          const currentRunNumber = context.runNumber;
+          const target = process.env.TARGET;
+          const peerTarget = target === 'x86' ? 'r2s' : 'x86';
+          const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+          core.info(`Waiting for ${peerTarget} build at ${sha}`);
+          for (let attempt = 1; attempt <= 350; attempt++) {
+            const { data } = await github.rest.actions.listWorkflowRuns({
+              owner,
+              repo,
+              workflow_id: process.env.PEER_WORKFLOW,
+              branch,
+              head_sha: sha,
+              event: 'push',
+              per_page: 100,
+            });
+            const peerRun = data.workflow_runs
+              .filter(run => run.head_branch === branch && run.head_sha === sha && run.event === 'push')
+              .sort((a, b) => b.run_number - a.run_number)[0];
+
+            if (peerRun) {
+              const { data: jobsData } = await github.rest.actions.listJobsForWorkflowRun({
+                owner,
+                repo,
+                run_id: peerRun.id,
+                per_page: 100,
+              });
+              const peerJob = jobsData.jobs.find(job => job.name === process.env.PEER_JOB_NAME);
+              if (peerJob?.status === 'completed') {
+                if (peerJob.conclusion !== 'success') {
+                  core.setOutput('should-publish', 'false');
+                  core.notice(`${peerTarget} build ended with ${peerJob.conclusion}; no combined release will be published.`);
+                  return;
+                }
+
+                const x86Run = target === 'x86' ? { id: currentRunId, run_number: currentRunNumber } : peerRun;
+                const r2sRun = target === 'r2s' ? { id: currentRunId, run_number: currentRunNumber } : peerRun;
+                core.setOutput('should-publish', 'true');
+                core.setOutput('x86-run-id', String(x86Run.id));
+                core.setOutput('x86-run-number', String(x86Run.run_number));
+                core.setOutput('r2s-run-id', String(r2sRun.id));
+                core.setOutput('r2s-run-number', String(r2sRun.run_number));
+                core.info(`Both device builds succeeded. x86 run ${x86Run.id}; R2S run ${r2sRun.id}.`);
+                return;
+              }
+              if (peerRun.status === 'completed' && !peerJob) {
+                core.setFailed(`Could not find build job "${process.env.PEER_JOB_NAME}" in peer run ${peerRun.id}.`);
+                return;
+              }
+            }
+
+            if (attempt % 5 === 0) core.info(`Still waiting for the matching ${peerTarget} build (${attempt} minutes).`);
+            await delay(60_000);
+          }
+          core.setFailed(`Timed out waiting for the matching ${peerTarget} build at ${sha}.`);
+
+    - name: Download x86 build artifact
+      if: steps.matching-build.outputs.should-publish == 'true'
+      uses: actions/download-artifact@v8
+      with:
+        name: ${{ inputs.target == 'x86' && format('{0}-{1}', inputs.current-artifact-prefix, github.run_number) || format('{0}-{1}', inputs.peer-artifact-prefix, steps.matching-build.outputs.x86-run-number) }}
+        run-id: ${{ steps.matching-build.outputs.x86-run-id }}
+        repository: ${{ github.repository }}
+        github-token: ${{ github.token }}
+        path: release-staging/x86
+
+    - name: Download NanoPi R2S build artifact
+      if: steps.matching-build.outputs.should-publish == 'true'
+      uses: actions/download-artifact@v8
+      with:
+        name: ${{ inputs.target == 'r2s' && format('{0}-{1}', inputs.current-artifact-prefix, github.run_number) || format('{0}-{1}', inputs.peer-artifact-prefix, steps.matching-build.outputs.r2s-run-number) }}
+        run-id: ${{ steps.matching-build.outputs.r2s-run-id }}
+        repository: ${{ github.repository }}
+        github-token: ${{ github.token }}
+        path: release-staging/r2s
+
+    - name: Package firmware bundles and checksums
+      if: steps.matching-build.outputs.should-publish == 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        short_sha="${GITHUB_SHA:0:12}"
+        mkdir -p release-assets
+        tar -czf "release-assets/Q-WRT-x86_64-${short_sha}.tar.gz" -C release-staging/x86 .
+        tar -czf "release-assets/Q-WRT-NanoPi-R2S-${short_sha}.tar.gz" -C release-staging/r2s .
+        (cd release-assets && sha256sum Q-WRT-x86_64-*.tar.gz Q-WRT-NanoPi-R2S-*.tar.gz > SHA256SUMS)
+        cat > release-assets/RELEASE-NOTES.md <<EOF
+        Automated Q-WRT firmware build from commit ${GITHUB_SHA} on branch ${GITHUB_REF_NAME}.
+
+        Includes the x86_64 generic and FriendlyElec NanoPi R2S firmware output bundles. Each bundle contains its target build output, including firmware images and the upstream SHA256SUMS file. Verify the downloaded archives with the attached SHA256SUMS file.
+        EOF
+
+    - name: Create and publish GitHub Release
+      if: steps.matching-build.outputs.should-publish == 'true'
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        RELEASE_TAG: q-wrt-${{ github.sha }}
+      run: |
+        set -euo pipefail
+        assets=(release-assets/Q-WRT-x86_64-*.tar.gz release-assets/Q-WRT-NanoPi-R2S-*.tar.gz release-assets/SHA256SUMS)
+        if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft' > release-state.txt 2>/dev/null; then
+          if [[ "$(<release-state.txt)" == "true" ]]; then
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --repo "$GITHUB_REPOSITORY" --clobber
+            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+          else
+            echo "Release $RELEASE_TAG is already published; skipping duplicate publication."
+          fi
+        else
+          gh release create "$RELEASE_TAG" "${assets[@]}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Q-WRT firmware ${GITHUB_SHA:0:12}" \
+            --notes-file release-assets/RELEASE-NOTES.md \
+            --draft
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
+        fi
