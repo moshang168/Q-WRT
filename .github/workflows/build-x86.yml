@@ -83,3 +83,30 @@ jobs:
           path: bin/targets/x86/64/**
           if-no-files-found: error
           retention-days: 14
+
+
+  publish-release:
+    name: Publish release when both device builds succeed
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/upgrade-openwrt-25.12'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    concurrency:
+      group: q-wrt-release-${{ github.sha }}
+      cancel-in-progress: false
+    permissions:
+      actions: read
+      contents: write
+
+    steps:
+      - name: Check out release helper
+        uses: actions/checkout@v5
+
+      - name: Wait for NanoPi R2S build
+        uses: ./.github/actions/publish-firmware-release
+        with:
+          target: x86
+          current-artifact-prefix: q-wrt-x86_64
+          peer-artifact-prefix: q-wrt-nanopi-r2s
+          peer-workflow: build-r2s.yml
+          peer-job-name: FriendlyElec NanoPi R2S (RK3328)
