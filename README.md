@@ -1,22 +1,5 @@
 ![OpenWrt logo](include/logo.png)
 
-## Q-WRT firmware builds
-
-This tree is based on the OpenWrt 25.12.5 stable release. Its default kernel
-line is Linux 6.12 (6.12.94 in this release).
-
-To build a firmware image on GitHub, open **Actions**, choose one of these
-workflows, and select **Run workflow**:
-
-- **Build x86 firmware** builds generic x86_64 images for a PC or virtual
-  machine. Download the `q-wrt-x86_64-*` artifact from the completed run.
-- **Build NanoPi R2S firmware** builds images for the FriendlyElec NanoPi R2S
-  (Rockchip RK3328). Download the `q-wrt-nanopi-r2s-*` artifact from the
-  completed run.
-
-Firmware images are device-specific; use the R2S workflow for that board and
-the x86 workflow for x86_64 hardware.
-
 OpenWrt Project is a Linux operating system targeting embedded devices. Instead
 of trying to create a single, static firmware, OpenWrt provides a fully
 writable filesystem with package management. This frees you from the

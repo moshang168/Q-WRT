@@ -1,0 +1,22 @@
+#!/bin/sh
+
+# Keep the board's eth1 LAN / eth0 WAN mapping from base-files and only set
+# the first-boot management address and DHCP pool for the NanoPi R2S.
+[ "$(board_name)" = "friendlyarm,nanopi-r2s" ] || exit 0
+
+uci -q get network.lan >/dev/null || exit 0
+
+uci set network.lan.proto='static'
+uci set network.lan.ipaddr='192.168.2.1'
+uci set network.lan.netmask='255.255.255.0'
+uci set dhcp.lan.ignore='0'
+uci set dhcp.lan.start='100'
+uci set dhcp.lan.limit='150'
+uci set dhcp.lan.leasetime='12h'
+uci -q get luci.main >/dev/null && uci set luci.main.lang='zh_cn'
+
+uci commit network
+uci commit dhcp
+uci commit luci
+
+exit 0

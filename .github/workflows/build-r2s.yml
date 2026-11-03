@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - upgrade-openwrt-25.12
+  pull_request:
+    branches:
+      - upgrade-openwrt-25.12
   workflow_dispatch:
 
 permissions:
@@ -45,6 +48,13 @@ jobs:
           CONFIG_TARGET_rockchip=y
           CONFIG_TARGET_rockchip_armv8=y
           CONFIG_TARGET_rockchip_armv8_DEVICE_friendlyarm_nanopi-r2s=y
+          CONFIG_PACKAGE_dropbear=y
+          CONFIG_PACKAGE_dnsmasq=y
+          CONFIG_PACKAGE_firewall4=y
+          CONFIG_PACKAGE_kmod-usb-net-rtl8152=y
+          CONFIG_PACKAGE_luci=y
+          CONFIG_PACKAGE_luci-ssl=y
+          CONFIG_LUCI_LANG_zh_Hans=y
           CONFIG_CCACHE=y
           EOF
           make defconfig
@@ -75,6 +85,9 @@ jobs:
       - name: Build firmware
         run: make -j"$(nproc)" BUILD_LOG=1
 
+      - name: Verify NanoPi R2S image and required packages
+        run: bash scripts/ci/verify-r2s-firmware.sh
+
       - name: Upload NanoPi R2S firmware images
         uses: actions/upload-artifact@v6
         with:
@@ -82,30 +95,3 @@ jobs:
           path: bin/targets/rockchip/armv8/**
           if-no-files-found: error
           retention-days: 14
-
-
-  publish-release:
-    name: Publish release when both device builds succeed
-    needs: build
-    if: github.event_name == 'push' && github.ref == 'refs/heads/upgrade-openwrt-25.12'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 360
-    concurrency:
-      group: q-wrt-release-${{ github.sha }}
-      cancel-in-progress: false
-    permissions:
-      actions: read
-      contents: write
-
-    steps:
-      - name: Check out release helper
-        uses: actions/checkout@v5
-
-      - name: Wait for x86 build
-        uses: ./.github/actions/publish-firmware-release
-        with:
-          target: r2s
-          current-artifact-prefix: q-wrt-nanopi-r2s
-          peer-artifact-prefix: q-wrt-x86_64
-          peer-workflow: build-x86.yml
-          peer-job-name: OpenWrt x86_64 generic

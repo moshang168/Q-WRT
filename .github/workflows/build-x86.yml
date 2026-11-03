@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - upgrade-openwrt-25.12
+  pull_request:
+    branches:
+      - upgrade-openwrt-25.12
   workflow_dispatch:
 
 permissions:

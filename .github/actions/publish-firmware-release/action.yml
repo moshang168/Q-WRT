@@ -25,7 +25,6 @@ runs:
     - name: Find the matching build and wait for it to finish
       id: matching-build
       uses: actions/github-script@v8
-      timeout-minutes: 350
       env:
         TARGET: ${{ inputs.target }}
         PEER_WORKFLOW: ${{ inputs.peer-workflow }}
@@ -126,7 +125,7 @@ runs:
         cat > release-assets/RELEASE-NOTES.md <<EOF
         Automated Q-WRT firmware build from commit ${GITHUB_SHA} on branch ${GITHUB_REF_NAME}.
 
-        Includes the x86_64 generic and FriendlyElec NanoPi R2S firmware output bundles. Each bundle contains its target build output, including firmware images and the upstream SHA256SUMS file. Verify the downloaded archives with the attached SHA256SUMS file.
+        Includes the x86_64 generic and FriendlyElec NanoPi R2S firmware output bundles built from OpenWrt 25.12.6. The R2S bundle passed checks for its compressed disk image, boot/root partition table, Chinese LuCI, SSH, DHCP, firewall, and USB Ethernet support. Verify the downloaded archives with the attached SHA256SUMS file. Hardware boot and network operation still require a physical NanoPi R2S test.
         EOF
 
     - name: Create and publish GitHub Release
