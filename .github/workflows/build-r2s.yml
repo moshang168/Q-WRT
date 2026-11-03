@@ -54,7 +54,7 @@ jobs:
           CONFIG_PACKAGE_kmod-usb-net-rtl8152=y
           CONFIG_PACKAGE_luci=y
           CONFIG_PACKAGE_luci-ssl=y
-          CONFIG_PACKAGE_luci-i18n-base-zh-cn=y
+          CONFIG_LUCI_LANG_zh_Hans=y
           CONFIG_CCACHE=y
           EOF
           make defconfig
