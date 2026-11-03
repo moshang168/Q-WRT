@@ -25,11 +25,17 @@ grep -q "192.168.2.1" files/etc/uci-defaults/99-q-wrt-nanopi-r2s || {
   exit 1
 }
 
-gzip -t "$image"
 raw_image="$(mktemp)"
+image_without_metadata="$(mktemp --suffix=.img.gz)"
 partition_table="$(mktemp)"
-trap 'rm -f "$raw_image" "$partition_table"' EXIT
-gzip -dc "$image" > "$raw_image"
+trap 'rm -f "$raw_image" "$image_without_metadata" "$partition_table"' EXIT
+cp "$image" "$image_without_metadata"
+fwtool="staging_dir/host/bin/fwtool"
+[[ -x "$fwtool" ]] || { echo "Missing host fwtool needed to validate OpenWrt image metadata" >&2; exit 1; }
+"$fwtool" -s /dev/null -t "$image_without_metadata" || true
+"$fwtool" -i /dev/null -t "$image_without_metadata"
+gzip -t "$image_without_metadata"
+gzip -dc "$image_without_metadata" > "$raw_image"
 sfdisk --dump "$raw_image" > "$partition_table"
 partition_count="$(grep -cE '^[^#].*:[[:space:]]+start=' "$partition_table" || true)"
 if (( partition_count < 2 )); then
