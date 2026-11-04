@@ -8,7 +8,7 @@ manifest="$(find "$image_dir" -maxdepth 1 -type f -name '*friendlyarm_nanopi-r2s
 [[ -n "$image" && -s "$image" ]] || { echo "Missing non-empty NanoPi R2S sysupgrade image" >&2; exit 1; }
 [[ -n "$manifest" && -s "$manifest" ]] || { echo "Missing NanoPi R2S package manifest" >&2; exit 1; }
 
-for package in dropbear dnsmasq firewall4 kmod-usb-net-rtl8152 luci luci-ssl luci-i18n-base-zh-cn; do
+for package in dropbear dnsmasq firewall4 kmod-tun kmod-nf-conntrack-netlink kmod-usb-net-rtl8152 luci luci-ssl luci-i18n-base-zh-cn; do
   if ! awk -v package="$package" '$1 == package { found = 1 } END { exit !found }' "$manifest"; then
     echo "Required package is missing from the R2S firmware manifest: $package" >&2
     exit 1
@@ -45,5 +45,5 @@ if (( partition_count < 2 )); then
 fi
 
 echo "Verified $image"
-echo "Verified required LuCI, SSH, DHCP, firewall, and USB Ethernet packages"
+echo "Verified required LuCI, SSH, DHCP, firewall, OpenClash kernel modules, and USB Ethernet packages"
 echo "Verified compressed disk image and $partition_count partition entries"

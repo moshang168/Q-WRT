@@ -16,4 +16,5 @@ After the first boot, connect the management computer to the R2S LAN port
 - SSH: Dropbear on the LAN interface, user `root`
 
 The image includes the Chinese LuCI interface, HTTPS support, Dropbear, DHCP,
-firewall, and the USB Ethernet driver.
+firewall, the USB Ethernet driver, and the `kmod-tun` and
+`kmod-nf-conntrack-netlink` kernel modules needed by OpenClash.
