@@ -38,10 +38,20 @@ qemu-system-x86_64 \
 	> "$qemu_log" 2>&1 &
 qemu_pid=$!
 
-booted=0
+console_ready=0
+modules_ready=0
+tun_ready=0
 for _ in $(seq 1 120); do
 	if grep -q 'Please press Enter to activate this console\.' "$serial_log" 2>/dev/null; then
-		booted=1
+		console_ready=1
+	fi
+	if grep -q 'kmodloader: done loading kernel modules from /etc/modules.d/' "$serial_log" 2>/dev/null; then
+		modules_ready=1
+	fi
+	if grep -q 'tun: Universal TUN/TAP device driver' "$serial_log" 2>/dev/null; then
+		tun_ready=1
+	fi
+	if (( console_ready && modules_ready && tun_ready )); then
 		break
 	fi
 	if ! kill -0 "$qemu_pid" 2>/dev/null; then
@@ -50,23 +60,23 @@ for _ in $(seq 1 120); do
 	sleep 1
 done
 
-if (( ! booted )); then
+if (( ! console_ready )); then
 	echo "x86 firmware did not reach the OpenWrt console in QEMU" >&2
 	cat "$serial_log" >&2 || true
 	cat "$qemu_log" >&2 || true
 	exit 1
 fi
 
-grep -q 'kmodloader: done loading kernel modules from /etc/modules.d/' "$serial_log" || {
+if (( ! modules_ready )); then
 	echo "x86 firmware did not finish loading its kernel modules in QEMU" >&2
 	cat "$serial_log" >&2
 	exit 1
-}
-grep -q 'tun: Universal TUN/TAP device driver' "$serial_log" || {
+fi
+if (( ! tun_ready )); then
 	echo "kmod-tun did not load in the x86 QEMU guest" >&2
 	cat "$serial_log" >&2
 	exit 1
-}
+fi
 
 echo "Verified x86 firmware booted through OpenWrt init in QEMU"
 tail -n 40 "$serial_log"
