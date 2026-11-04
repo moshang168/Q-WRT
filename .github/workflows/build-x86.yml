@@ -84,6 +84,9 @@ jobs:
       - name: Verify OpenClash kernel modules
         run: bash scripts/ci/verify-x86-firmware.sh
 
+      - name: Boot x86 image in QEMU
+        run: bash scripts/ci/boot-x86-qemu.sh
+
       - name: Upload x86 firmware images
         uses: actions/upload-artifact@v6
         with:
